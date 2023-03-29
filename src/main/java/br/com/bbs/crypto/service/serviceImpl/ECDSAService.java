@@ -1,73 +1,71 @@
 package br.com.bbs.crypto.service.serviceImpl;
 
+import br.com.bbs.crypto.exception.CipherException;
+import br.com.bbs.crypto.exception.KeyParseException;
 import br.com.bbs.crypto.model.dto.KeyPairDTO;
 import br.com.bbs.crypto.service.SignatureService;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.util.encoders.Base64;
 
 import javax.management.InvalidApplicationException;
+import java.rmi.ServerException;
 import java.security.*;
 import java.security.spec.*;
 public class ECDSAService implements SignatureService {
+
+    public static final String ALGORITHM = "ECDSA";
+    public static final String PROVIDER = "BC";
+    public static final String PARAMETER_SPEC = "prime256v1";
+
     public ECDSAService() {
         Security.addProvider(new BouncyCastleProvider());
     }
 
-    public KeyPair generateKeys() {
+    public KeyPair generateKeys() throws InvalidAlgorithmParameterException, NoSuchAlgorithmException, NoSuchProviderException {
 
         try {
-            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("ECDSA", "BC");
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(ALGORITHM, PROVIDER);
             SecureRandom random = SecureRandom.getInstanceStrong();
-            ECGenParameterSpec params = new ECGenParameterSpec("prime256v1");
+            ECGenParameterSpec params = new ECGenParameterSpec(PARAMETER_SPEC);
             keyPairGenerator.initialize(params, random);
             return keyPairGenerator.generateKeyPair();
 
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
+            throw new NoSuchAlgorithmException(e);
         } catch (NoSuchProviderException e) {
-            throw new RuntimeException(e);
+            throw new NoSuchProviderException("Invalid Provider");
         } catch (InvalidAlgorithmParameterException e) {
-            throw new RuntimeException(e);
+            throw new InvalidAlgorithmParameterException(e);
         }
     }
 
 
     @Override
-    public String sign(String privateKey, String message) {
+    public String sign(String privateKey, String message) throws KeyParseException, CipherException {
 
-        byte[] pubKeyBytes = Base64.decode(privateKey);
-        KeySpec keySpec = new PKCS8EncodedKeySpec(pubKeyBytes);
-        KeyFactory keyFactory = null;
         PrivateKey instanceOfPrivateKey = null;
+
         try {
-            keyFactory = KeyFactory.getInstance("ECDSA");
+            byte[] pubKeyBytes = Base64.decode(privateKey);
+            KeySpec keySpec = new PKCS8EncodedKeySpec(pubKeyBytes);
+            KeyFactory keyFactory = KeyFactory.getInstance(ALGORITHM);
             instanceOfPrivateKey = keyFactory.generatePrivate(keySpec);
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
-        } catch (InvalidKeySpecException e) {
-            throw new RuntimeException(e);
+        } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
+            throw new KeyParseException("Failed to parse Key", e);
         }
 
-        Signature signature;
-
         try {
-            signature = Signature.getInstance("ECDSA","BC");
+            Signature signature = Signature.getInstance(ALGORITHM,PROVIDER);
             signature.initSign(instanceOfPrivateKey);
             signature.update(message.getBytes());
             return Base64.toBase64String(signature.sign());
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
-        } catch (NoSuchProviderException e) {
-            throw new RuntimeException(e);
-        } catch (SignatureException e) {
-            throw new RuntimeException(e);
-        } catch (InvalidKeyException e) {
-            throw new RuntimeException(e);
+        } catch (NoSuchAlgorithmException | NoSuchProviderException | SignatureException | InvalidKeyException e) {
+            throw new CipherException("Failed to do final Cipher", e);
         }
     }
 
     @Override
-    public boolean verify(String publicKey, String message, String signature) throws InvalidApplicationException {
+    public boolean verify(String publicKey, String message, String signature) throws KeyParseException, CipherException {
 
         byte[] pubKey = Base64.decode(publicKey);
 
@@ -76,24 +74,28 @@ public class ECDSAService implements SignatureService {
 
         try {
 
-            KeyFactory keyFactory = KeyFactory.getInstance("ECDSA");
+            KeyFactory keyFactory = KeyFactory.getInstance(ALGORITHM);
             instanceOfPublicKey = keyFactory.generatePublic(specPublic);
 
         } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
-            throw new InvalidApplicationException(e);
+            throw new KeyParseException("Failed to parse Key", e);
         }
 
         try {
-            Signature algorithm = Signature.getInstance("ECDSA", "BC");
+            Signature algorithm = Signature.getInstance(ALGORITHM, PROVIDER);
             algorithm.initVerify(instanceOfPublicKey);
             algorithm.update(message.getBytes());
             return algorithm.verify(Base64.decode(signature));
         } catch (SignatureException | InvalidKeyException | NoSuchAlgorithmException | NoSuchProviderException e) {
-            throw new InvalidApplicationException(e);
+            throw new CipherException("Failed to do final Cipher", e);
         }
     }
 
-    public KeyPairDTO generateKeyPair() {
-        return new KeyPairDTO(generateKeys());
+    public KeyPairDTO generateKeyPair() throws ServerException {
+        try {
+            return new KeyPairDTO(generateKeys());
+        } catch (Exception e) {
+            throw new ServerException("Could not generate key pair", e);
+        }
     }
 }

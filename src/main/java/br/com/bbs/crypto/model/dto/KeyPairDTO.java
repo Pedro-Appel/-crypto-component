@@ -12,7 +12,7 @@ public class KeyPairDTO {
         this.t1 = Base64.getUrlEncoder().encodeToString(keyPair.getPrivate().getEncoded());
         this.t2 = Base64.getUrlEncoder().encodeToString(keyPair.getPublic().getEncoded());
     }
-    public static byte[] getPublicKeyDecoded(String publicKey) {
+    public static byte[] getUrlDecoded(String publicKey) {
         return Base64.getUrlDecoder().decode(publicKey);
     }
 
